@@ -219,7 +219,7 @@ mkdir -p TreeMix/plots
 cat <<'EOF' > {rule}.$$.tmp.R
 
 library(RColorBrewer)
-source("scripts/plotting_funcs.R")        
+source("workflow/scripts/plotting_funcs.R")        
 mrange <- seq({params.ms}[1], {params.ms}[2]-1)         
 prefix <- '{params.prefix}'
 
