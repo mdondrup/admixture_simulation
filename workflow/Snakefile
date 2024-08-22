@@ -23,6 +23,7 @@ Chromosomes=map(lambda x: "chr"+str(x) , range(1,16+1)) # Chromosomes to use
 #        "simple_bottleneck", "bottleneck_different_groupsize"]    
 
 Models=["bottleneck_different_groupsize"]
+Models=["uniform"]
 
 rule all:
     input:
@@ -119,8 +120,7 @@ rule treemix_input:
     
     shell:
           """
-    scripts/vcf2treemix.sh {input.vcf} {input.clust}
-    
+          workflow/scripts/vcf2treemix.sh {input.vcf} {input.clust}
           """
 
 ### rule for generating a single bootstrap replicates

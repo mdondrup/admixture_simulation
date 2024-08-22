@@ -51,7 +51,7 @@ plink --bfile $file --freq --missing --within $2 --out $file --allow-no-sex --al
 gzip $file".frq.strat"
 
 # create input file for Treemix
-scripts/plink2treemix.py $file".frq.strat.gz" $file".treemix.frq.gz"
+workflow/scripts/plink2treemix.py $file".frq.strat.gz" $file".treemix.frq.gz"
 
 # unzip allele frequency information
 gunzip $file".treemix.frq.gz"
