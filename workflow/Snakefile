@@ -45,7 +45,7 @@ rule setup:
          
 
 rule build_model:
-    output: "results/{model}.vcf.gz"
+    output: "results/{model}-full.vcf.gz"
     conda: "envs/msprime.yaml"        
     params:
         isize=1e6,
@@ -60,7 +60,7 @@ rule build_model:
 
 rule subsample_recode:
     conda: "envs/vcftools.yaml"
-    input: vcf="results/{model}.vcf.gz",
+    input: vcf="results/{model}-full.vcf.gz",
     output: "results/{model}-filtered.vcf.gz"
     threads: 60
     params:
@@ -273,7 +273,7 @@ rule final_tree_from_consensus:
     conda: "envs/treemix.yaml"
     input:
         contree="results/TreeMix/{model}_m{migrations}.contree",
-        frq="results/final-panel.{model}.treemix.frq.gz"
+        frq="results/{model}-filtered.treemix.frq.gz"
     output: treeout="results/TreeMix/Consensus_{model}_m{migrations}.treeout.gz",
             cov="results/TreeMix/Consensus_{model}_m{migrations}.cov.gz",
             modelcov="results/TreeMix/Consensus_{model}_m{migrations}.modelcov.gz"
