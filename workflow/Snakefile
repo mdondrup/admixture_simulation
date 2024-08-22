@@ -1,4 +1,315 @@
-# Main entrypoint of the workflow. 
-# Please follow the best practices: 
-# https://snakemake.readthedocs.io/en/stable/snakefiles/best_practices.html,
-# in particular regarding the standardized folder structure mentioned there. 
+import os 
+
+
+onsuccess:
+    print("Workflow finished, no error")
+    shell("send_message.py 'TreeMix pipeline finished, no error'")
+
+onerror:
+    print("An error occurred, see the log")
+    shell("send_message.py 'An error occured in TreeMix pipeline, see the log: {log}'")
+    
+onstart:
+    print ("----------------------------------------------------------------------------")
+    print ("Starting TreeMix on simulated data analysis pipeline")
+    print ("----------------------------------------------------------------------------")
+    shell('send_message.py "TreeMix pipeline started on $(uname -a) at $(date)"')
+
+    
+TreeMixBoot=range(1,101) # Number of bootstrap replicates (100)
+TreeMixMigr=range(0,15) # Max number of Migration events to test
+Chromosomes=map(lambda x: "chr"+str(x) , range(1,16+1)) # Chromosomes to use
+SiteFilters=["none"]    
+
+
+rule all:
+    input:
+        ".setup_complete",
+        #"simple_bottleneck_model.vcf",
+         treeplots=expand("TreeMix/plots/Consensus_{filter}_plots.pdf", filter=SiteFilters),
+         txt=expand("TreeMix/{nfilter}-OptM.txt", nfilter=SiteFilters)
+
+
+rule setup:
+    conda: "../envs/vcftools.yaml"
+    output: setup=".setup_complete"
+           
+    shell:
+        """
+        mkdir -p TreeMix/bootstrap TreeMix/logs misc/
+       
+        touch .setup_complete        
+        """         
+
+         
+
+rule build_bottleneck_model:
+    output: "simple_bottleneck_model.vcf.gz"
+    conda: "../envs/msprime.yaml"        
+    params:
+        isize=1e6,
+        genyear=2900,
+        rate=1.67e-10,
+    script:
+       "../scripts/simulation.py"
+
+
+        
+
+
+rule subsample_recode:
+    conda: "../envs/vcftools.yaml"
+    input: vcf="simple_bottleneck_model.vcf.gz",
+    output: "final-panel.vcf.gz"
+    threads: 60
+    params:
+        nsnps=12000 #sample 12000 markers for speed
+    message: "Generating random sample of SNPs and recoding for TreeMix"
+    shell:            
+        r"""
+       
+        #bcftools index -f  {input.vcf}
+       
+        set -x
+        #set +o pipefail
+        bcftools view --threads {threads} --with-header --types snps --max-alleles 2  {input.vcf} |\
+        vcftools --gzvcf - --max-missing 1 --recode --stdout | bgzip -c > $$.tmp.vcf.gz
+        bcftools view --header-only $$.tmp.vcf.gz > {output}.unsorted
+        bcftools view --no-header $$.tmp.vcf.gz | awk '{{ printf("%f\t%s\n",rand(),$0);}}' | ( sort -t $'\t'  -T . -k1,1g || true) | head -n {params.nsnps} | cut -f 2- >> {output}.unsorted
+        bcftools sort -o {output} {output}.unsorted 
+       
+
+        echo "---------------------------------------------------------"
+        echo "Remaining markers after {rule}:"
+        bcftools stats {output} | grep -e"^SN"
+        rm -f  $$.tmp.vcf.gz  {output}.unsorted
+        
+        """
+
+        
+rule make_new_clusterfile:
+    conda: "../envs/vcftools.yaml"
+    input:
+        vcf="final-panel.vcf.gz",
+       
+
+    output: clust="misc/yeast.clust",
+            list="misc/yeast.list"
+    message: "Generating new cluster file"
+    priority: 0         
+    shell:
+        r"""
+ 
+        bcftools query -l {input.vcf} | awk '{{ printf $1"\t"$1"\t"; gsub("_.*","",$1); printf $1"\n"}}' > {output.clust}
+        bcftools query -l {input.vcf} | sort -u | awk '{{ gsub("_.*","",$1); printf $1"\n"}}' > {output.list}
+        
+        """
+
+rule none:
+    input: "final-panel.vcf.gz"
+    output: "final-panel.none.vcf.gz"
+    shell:
+        "cp {input} {output}"
+
+    
+        
+       
+rule ld_prune:
+     conda: "../envs/vcftools.yaml"
+     input: "final-panel.vcf.gz"
+     output: "final-panel.LDpruned.vcf.gz"
+     params:
+         threshold=0.6
+     message: "Pruning SNP matrix for markers in LD > {params.threshold} ..."    
+
+         
+     shell:
+         """
+        scripts/ldPruning.sh {input} vcf {params.threshold}
+
+        echo "---------------------------------------------------------"
+        echo "Remaining Markers after {rule}, LD_threshold {params.threshold}:"
+        bcftools stats {output} | grep -e"^SN"
+
+
+         
+         """
+
+rule treemix_input:
+    conda: "../envs/vcftools.yaml"
+    input: vcf="final-panel.{filter}.vcf.gz",       
+   	   clust="misc/yeast.clust"
+    output: "final-panel.{filter}.treemix.frq.gz"
+    
+    shell:
+          """
+    scripts/vcf2treemix.sh {input.vcf} {input.clust}
+    
+          """
+
+### rule for generating a single bootstrap replicates
+### bootstrap replicates will be run in parallel
+
+rule:
+    name: "TreeMix_bootstrap_{myfilter}_{migrations}_{replicate}" 
+    conda: "../envs/treemix.yaml"
+    input: "final-panel.{myfilter}.treemix.frq.gz"
+    output:
+        treeout="TreeMix/bootstrap/{myfilter}/bootrep_m{migrations}_b{replicate}.treeout.gz",
+            cov="TreeMix/bootstrap/{myfilter}/bootrep_m{migrations}_b{replicate}.cov.gz",
+            modelcov="TreeMix/bootstrap/{myfilter}/bootrep_m{migrations}_b{replicate}.modelcov.gz",
+            llik="TreeMix/bootstrap/{myfilter}/bootrep_m{migrations}_b{replicate}.llik"
+            #dir=directory("TreeMix/bootstrap/{myfilter}")
+    threads: 1
+    retries: 5
+    resources:
+        nr = lambda wildcards, attempt: attempt,
+        runtime = "24h"
+        
+    log: "TreeMix/logs/bootrep_{myfilter}_m{migrations}_b{replicate}.log"
+    params:
+        prefix="TreeMix/bootstrap/{myfilter}/bootrep_m{migrations}_b{replicate}"
+        
+    message:
+        "TreeMix boostrap replicate no. {wildcards.replicate} - filter: {wildcards.myfilter} migrations: {wildcards.migrations} max runtime per job: {resources.runtime} min, try {resources.nr} of 5"    
+    shell:
+        r"""
+        mkdir -p TreeMix/bootstrap/{wildcards.myfilter} 
+        SEED=$RANDOM
+        echo "SEED=$SEED" > {log}
+        #echo calculating bootstrap replicate  {wildcards.replicate} for {wildcards.myfilter} with {wildcards.migrations} migrations, seed: $SEED
+        echo 
+        timeout --kill-after=5m {resources.runtime}m treemix -i {input} -bootstrap -se -m {wildcards.migrations} -root Wild -seed $SEED -o {params.prefix} >> {log} 2>&1
+        echo finished bootstrap replicate  {wildcards.replicate}, {wildcards.myfilter}, {wildcards.migrations} migrations, attempts: {resources.nr}
+        
+        """
+
+        # put all trees into a single file
+
+rule:
+    name: "merge_replicates_{nfilter}_{migrations}"
+    input:
+        expand("TreeMix/bootstrap/{{nfilter}}/bootrep_m{{migrations}}_b{replicate}.treeout.gz",
+               replicate=TreeMixBoot)
+    output:
+        "TreeMix/alltrees_{nfilter}_m{migrations}.trees"
+    message: "Merging replicates for {wildcards.nfilter}, migrations {wildcards.migrations}"
+    shell:
+         """
+         for f in {input}
+         do
+           zcat $f | head -1 >> {output}
+         done
+         """
+
+rule OptM:
+    conda: "../envs/r-optm.yaml"
+    input: expand("TreeMix/bootstrap/{{nfilter}}/bootrep_m{migrations}_b{replicate}.llik", migrations=TreeMixMigr, replicate=TreeMixBoot)
+    output: plot="TreeMix/plots/{nfilter}-OptM-plot.pdf",
+            txt="TreeMix/{nfilter}-OptM.txt"
+    params: folder="TreeMix/bootstrap/{nfilter}"        
+    shell:
+        r"""
+        mkdir -p TreeMix/plots
+cat <<'EOF' > {rule}.$$.tmp.R
+
+library(OptM)
+test.optM <- optM('{params.folder}')
+write.table(test.optM, file='{output.txt}', sep="\t", quote=F)
+### plot needs to be set to FALSE if not in interactive mode        
+plot_optM(test.optM, method = "Evanno", plot=FALSE, pdf='{output.plot}')
+
+EOF
+        
+        Rscript {rule}.$$.tmp.R
+        rm {rule}.$$.tmp.R
+        
+        """
+
+rule plot_trees:
+    conda: "../envs/treemix.yaml"
+    input:
+        cons=expand("TreeMix/Consensus_{{filter}}_m{migrations}.treeout.gz", migrations=TreeMixMigr),
+        list="misc/yeast.list"
+    output:
+        pdf="TreeMix/plots/Consensus_{filter}_plots.pdf"
+    params:
+        ms=TreeMixMigr,
+        prefix="TreeMix/Consensus_{filter}_m"
+
+    shell:
+        r"""
+mkdir -p TreeMix/plots
+cat <<'EOF' > {rule}.$$.tmp.R
+
+library(RColorBrewer)
+source("scripts/plotting_funcs.R")        
+mrange <- seq({params.ms}[1], {params.ms}[2]-1)         
+prefix <- '{params.prefix}'
+
+pdf(file='{output.pdf}')
+        
+for (m in mrange) {{
+ print(paste("plotting M=",m))       
+ x0=plot_tree(cex=0.9,  paste0(prefix,m))
+ title(paste('{wildcards.filter}', m,"edges"))
+ #x1=plot_resid(stem=paste0(prefix,m), pop_order="{input.list}")
+}}      
+dev.off()
+        
+        
+EOF
+
+  Rscript {rule}.$$.tmp.R
+  #rm {rule}.$$.tmp.R
+        
+        
+        """
+ 
+rule consensus:
+    conda: "../envs/phylip.yaml"
+    input: "TreeMix/alltrees_{nfilter}_m{migrations}.trees"
+    output: "TreeMix/{nfilter}_m{migrations}.contree"
+    params:
+        wdir="TreeMix/{nfilter}_m{migrations}_wdir"
+    shell:
+        """
+        set -x
+        mkdir -p {params.wdir}
+        IN=$(realpath {input})
+        OUT=$(realpath {output})
+        posOutgroup=`head -1 {input} | tr "," "\n" | grep "Wild" -n | cut -d":" -f1`
+        cd {params.wdir}
+
+	# echo $posOutgroup
+	echo $IN > pconf
+	echo "O" >> pconf
+	echo $posOutgroup >> pconf
+	echo "Y" >> pconf
+        consense < pconf > consense.out
+        cat outtree | tr -d "\n" > $OUT
+        echo >> $OUT
+        cd ../..
+        rm -rf {params.wdir}/
+        """
+  
+rule final_tree_from_consensus:
+    conda: "../envs/treemix.yaml"
+    input:
+        contree="TreeMix/{filter}_m{migrations}.contree",
+        frq="final-panel.{filter}.treemix.frq.gz"
+    output: treeout="TreeMix/Consensus_{filter}_m{migrations}.treeout.gz",
+            cov="TreeMix/Consensus_{filter}_m{migrations}.cov.gz",
+            modelcov="TreeMix/Consensus_{filter}_m{migrations}.modelcov.gz"
+    params:
+        prefix="TreeMix/Consensus_{filter}_m{migrations}"
+    log: "TreeMix/logs/Consensus_{filter}_m{migrations}.log"
+    message: "Computing final consensus tree fro {wildcards.filter}, migrations: {wildcards.migrations}"     
+    shell:
+        """
+        treemix -i {input.frq} -m {wildcards.migrations} -k 500 -root Wild \
+        -se -tf {input.contree} -o {params.prefix} > {log}
+
+        
+        """
+        
