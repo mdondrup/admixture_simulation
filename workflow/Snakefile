@@ -16,14 +16,13 @@ onstart:
     shell('send_message.py "TreeMix pipeline started at $(date)"')
 
     
-TreeMixBoot=range(1,101) # Number of bootstrap replicates (100)
-TreeMixMigr=range(0,15) # Max number of Migration events to test
+TreeMixBoot=range(1,11) # Number of bootstrap replicates (100)
+TreeMixMigr=range(0,10) # Max number of Migration events to test
 Chromosomes=map(lambda x: "chr"+str(x) , range(1,16+1)) # Chromosomes to use
-#Models=["uniform", "uniform_different_groupsize",
-#        "simple_bottleneck", "bottleneck_different_groupsize"]    
+Models=["uniform", "uniform_different_groupsize",
+        "bottleneck", "bottleneck_different_groupsize", "double_bottleneck", "recent_admixture"]    
 
-Models=["bottleneck_different_groupsize"]
-Models=["uniform"]
+
 
 rule all:
     input:
@@ -187,7 +186,8 @@ rule OptM:
     shell:
         r"""
         mkdir -p results/TreeMix/plots
-cat <<'EOF' > {rule}.$$.tmp.R
+        SCRIPT=$(mktemp XXXXXXX.tmp.R)
+cat <<'EOF' > $SCRIPT
 
 library(OptM)
 test.optM <- optM('{params.folder}')
@@ -197,8 +197,8 @@ plot_optM(test.optM, method = "Evanno", plot=FALSE, pdf='{output.plot}')
 
 EOF
         
-        Rscript {rule}.$$.tmp.R
-        rm {rule}.$$.tmp.R
+        Rscript $SCRIPT
+        rm $SCRIPT
         
         """
 
@@ -251,21 +251,23 @@ rule consensus:
     shell:
         """
         set -x
-        mkdir -p {params.wdir}
+        RD=$(pwd)
+        mkdir -p {params.wdir}/
+        WD=$(mktemp -d -p {params.wdir})
         IN=$(realpath {input})
         OUT=$(realpath {output})
         posOutgroup=`head -1 {input} | tr "," "\n" | grep "Wild" -n | cut -d":" -f1`
-        cd {params.wdir}
+        cd $WD
 
-	# echo $posOutgroup
+        echo $posOutgroup
 	echo $IN > pconf
 	echo "O" >> pconf
 	echo $posOutgroup >> pconf
 	echo "Y" >> pconf
-        consense < pconf > consense.out
+        consense < pconf 
         cat outtree | tr -d "\n" > $OUT
         echo >> $OUT
-        cd ../..
+        cd $RD
         rm -rf {params.wdir}/
         """
   

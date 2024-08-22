@@ -54,20 +54,20 @@ demography.add_population(
     description="Ancestral equilibrium population",
     initial_size=isize,
 )
-demography.add_instantaneous_bottleneck(time=100*gy, strength=600*gy, population="Sake")
-demography.add_instantaneous_bottleneck(time=200*gy, strength=400*gy, population="Lager")
-demography.add_population_split(500*gy, derived=["Lager", "Ale"], ancestral="Beer0")
-demography.add_population_split(1000*gy, derived=["Kveik", "Beer0"], ancestral="Beer")
+#demography.add_instantaneous_bottleneck(time=100*gy, strength=600*gy, population="Sake")
+#demography.add_instantaneous_bottleneck(time=200*gy, strength=400*gy, population="Lager")
+demography.add_population_split(4000*gy, derived=["Lager", "Ale"], ancestral="Beer0")
+demography.add_population_split(4000*gy, derived=["Kveik", "Beer0"], ancestral="Beer")
 demography.add_population_split(4000*gy, derived=["Sake", "Beer"], ancestral="CH0")
 demography.add_population_split(13000*gy, derived=["CH0"], ancestral="Wild")       
 demography.add_population_split(300000*gy, derived=["Wild"], ancestral="ANC")
 
 print(demography)
-tup=list(product(["Wild","Sake","Ale", "Lager"],range(1,11)))+list(product(["Kveik"],range(1,21)))
+tup=list(product(["Wild","Sake","Ale", "Lager"],range(1,11)))+list(product(["Kveik"],range(1,41)))
 nams=list(map(lambda x: x[0]+"_"+str(x[1]), tup))
 
 ts = msprime.sim_ancestry(
-    {"Wild":10, "Sake":10, "Ale":10, "Lager":10, "Kveik":20},
+    {"Wild":10, "Sake":10, "Ale":10, "Lager":10, "Kveik":40},
     sequence_length=12e6,
     demography=demography, random_seed=1234)
 print("simulating mutations")
