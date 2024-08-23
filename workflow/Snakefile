@@ -3,7 +3,7 @@ import os
 
 onsuccess:
     print("Workflow finished, no error")
-    shell("send_message.py 'TreeMix simulation pipeline finished, no error'")
+    shell("send_message.py 'TreeMix simulation pipeline finished, no error'") # comment out this line if you don't have a messenger script
 
 onerror:
     print("An error occurred, see the log")
@@ -13,8 +13,10 @@ onstart:
     print ("----------------------------------------------------------------------------")
     print ("Starting TreeMix on simulated data analysis pipeline")
     print ("----------------------------------------------------------------------------")
-    shell('send_message.py "TreeMix pipeline started at $(date)"')
+    shell('send_message.py "TreeMix pipeline started at $(date)"') # comment out this line if you don't have a messenger script
 
+# The messenger script is not included in the repository 
+    
     
 TreeMixBoot=range(1,101) # Number of bootstrap replicates (100)
 TreeMixMigr=range(0,5) # Max number of Migration events to test
