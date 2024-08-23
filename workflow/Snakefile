@@ -16,12 +16,11 @@ onstart:
     shell('send_message.py "TreeMix pipeline started at $(date)"')
 
     
-TreeMixBoot=range(1,11) # Number of bootstrap replicates (100)
-TreeMixMigr=range(0,10) # Max number of Migration events to test
+TreeMixBoot=range(1,101) # Number of bootstrap replicates (100)
+TreeMixMigr=range(0,5) # Max number of Migration events to test
 Chromosomes=map(lambda x: "chr"+str(x) , range(1,16+1)) # Chromosomes to use
 Models=["uniform", "uniform_different_groupsize",
-        "bottleneck", "bottleneck_different_groupsize", "double_bottleneck", "recent_admixture"]    
-
+        "bottleneck", "bottleneck_different_groupsize", "double_bottleneck", "recent_admixture", "multi_bottleneck"]   
 
 
 rule all:
@@ -64,7 +63,7 @@ rule subsample_recode:
     output: "results/{model}-filtered.vcf.gz"
     threads: 60
     params:
-        nsnps=12000 #sample 12000 markers for speed
+        nsnps=20000 #sample 20000 markers for speed
     message: "Generating random sample of SNPs and recoding for TreeMix"
     shell:            
         r"""

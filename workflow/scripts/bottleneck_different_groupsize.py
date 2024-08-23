@@ -54,8 +54,8 @@ demography.add_population(
     description="Ancestral equilibrium population",
     initial_size=isize,
 )
-demography.add_instantaneous_bottleneck(time=100*gy, strength=1000*gy, population="Sake")
-#demography.add_instantaneous_bottleneck(time=200*gy, strength=400*gy, population="Lager")
+demography.add_instantaneous_bottleneck(time=100*gy, strength=600*gy, population="Sake")
+demography.add_instantaneous_bottleneck(time=200*gy, strength=400*gy, population="Lager")
 demography.add_population_split(500*gy, derived=["Lager", "Ale"], ancestral="Beer0")
 demography.add_population_split(1000*gy, derived=["Kveik", "Beer0"], ancestral="Beer")
 demography.add_population_split(4000*gy, derived=["Sake", "Beer"], ancestral="CH0")
