@@ -1,15 +1,18 @@
-# Snakemake workflow: `<name>`
-
-[![Snakemake](https://img.shields.io/badge/snakemake-≥6.3.0-brightgreen.svg)](https://snakemake.github.io)
-[![GitHub actions status](https://github.com/<owner>/<repo>/workflows/Tests/badge.svg?branch=main)](https://github.com/<owner>/<repo>/actions?query=branch%3Amain+workflow%3ATests)
+# Snakemake workflow: `admixture_simulation`
 
 
-A Snakemake workflow for `<description>`
+A Snakemake workflow for `running TreeMix on simulated data`
 
+The workflow uses msprime to generate VCF files under different demographic models with and without admixture.
+Then runs TreeMix with 100 botstrap replicates, and generates a consensus tree.
 
 ## Usage
 
-The usage of this workflow is described in the [Snakemake Workflow Catalog](https://snakemake.github.io/snakemake-workflow-catalog/?usage=<owner>%2F<repo>).
+All dependencies are installed via conda. Models are implemented as one python script per model and placed in the scripts folder.
+Bootstrap replicates are run in parallel, one core per replicate. Comment out `shell` lines in onstart:  onerror: ... if not using 
+messenging script.
+
+Example usage: `snakemake -c <#cpus> --use conda` runs all models and subsequent TreeMix runs. 
 
 If you use this workflow in a paper, don't forget to give credits to the authors by citing the URL of this (original) <repo>sitory and its DOI (see above).
 
