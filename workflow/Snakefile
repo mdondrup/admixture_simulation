@@ -22,7 +22,7 @@ TreeMixBoot=range(1,101) # Number of bootstrap replicates (100)
 TreeMixMigr=range(0,5) # Max number of Migration events to test
 Chromosomes=map(lambda x: "chr"+str(x) , range(1,16+1)) # Chromosomes to use
 Models=["uniform", "uniform_different_groupsize",
-        "bottleneck", "bottleneck_different_groupsize", "double_bottleneck", "recent_admixture", "multi_bottleneck"]   
+        "bottleneck", "bottleneck_different_groupsize", "double_bottleneck", "recent_admixture", "multi_bottleneck", "multi_bottleneck_2", "multi_bottleneck_3"]   
 
 
 rule all:

@@ -55,12 +55,14 @@ demography.add_population(
     initial_size=isize,
 )
 
+#################### Events need to be ordered by time (recent to ancient) ###################################
 demography.add_instantaneous_bottleneck(time=100*gy, strength=600*gy, population="Sake")
 demography.add_instantaneous_bottleneck(time=200*gy, strength=400*gy, population="Lager")
+demography.add_population_split(600*gy, derived=["Lager", "Ale"], ancestral="Beer1")
 demography.add_instantaneous_bottleneck(time=750*gy, strength=300*gy, population="Kveik")
 demography.add_instantaneous_bottleneck(time=880*gy, strength=300*gy, population="Kveik")
 demography.add_instantaneous_bottleneck(time=980*gy, strength=300*gy, population="Kveik")
-demography.add_population_split(600*gy, derived=["Lager", "Ale"], ancestral="Beer1")
+
 demography.add_population_split(1000*gy, derived=["Kveik", "Beer1"], ancestral="Beer")
 demography.add_population_split(6000*gy, derived=["Sake", "Beer"], ancestral="CH0")
 demography.add_population_split(13000*gy, derived=["CH0"], ancestral="Wild")       
@@ -86,4 +88,4 @@ with open(vcf, 'w') as file:
       file.close()  
 
       
-check_call(['gzip', vcf ])      
+check_call(['bgzip', vcf ])      

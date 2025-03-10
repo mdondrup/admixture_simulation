@@ -83,4 +83,4 @@ with open(vcf, 'w') as file:
       file.close()  
 
       
-check_call(['gzip', vcf ])      
+check_call(['bgzip', vcf ])      
