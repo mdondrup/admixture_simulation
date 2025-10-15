@@ -1,73 +1,104 @@
-import os 
+import os
 
 
 onsuccess:
     print("Workflow finished, no error")
-    shell("send_message.py 'TreeMix simulation pipeline finished, no error'") # comment out this line if you don't have a messenger script
+    shell(
+        ".send_message.sh 'TreeMix simulation pipeline finished, no error'"
+    )  # comment out this line if you don't have a messenger script
+
 
 onerror:
     print("An error occurred, see the log")
-    shell("send_message.py 'An error occured in TreeMix pipeline, see the log: {log}'")
-    
-onstart:
-    print ("----------------------------------------------------------------------------")
-    print ("Starting TreeMix on simulated data analysis pipeline")
-    print ("----------------------------------------------------------------------------")
-    shell('send_message.py "TreeMix pipeline started at $(date)"') # comment out this line if you don't have a messenger script
+    shell(".send_message.sh 'An error occured in TreeMix pipeline, see the log: {log}'")
 
-# The messenger script is not included in the repository 
-    
-    
-TreeMixBoot=range(1,101) # Number of bootstrap replicates (100)
-TreeMixMigr=range(0,5) # Max number of Migration events to test
-Chromosomes=map(lambda x: "chr"+str(x) , range(1,16+1)) # Chromosomes to use
-Models=["uniform", "uniform_different_groupsize",
-        "bottleneck", "bottleneck_different_groupsize", "double_bottleneck", "recent_admixture", "multi_bottleneck", "multi_bottleneck_2", "multi_bottleneck_3"]   
+
+onstart:
+    print(
+        "----------------------------------------------------------------------------"
+    )
+    print("Starting TreeMix on simulated data analysis pipeline")
+    print(
+        "----------------------------------------------------------------------------"
+    )
+    shell(
+        '.send_message.sh "TreeMix pipeline started at $(date)"'
+    )  # comment out this line if you don't have a messenger script
+
+
+# The messenger script is not included in the repository
+
+
+TreeMixBoot = range(1, 101)  # Number of bootstrap replicates (100)
+TreeMixMigr = range(0, 5)  # Max number of Migration events to test
+Chromosomes = map(lambda x: "chr" + str(x), range(1, 16 + 1))  # Chromosomes to use
+"""
+Models = [
+    "uniform",
+    "uniform_different_groupsize",
+    "bottleneck",
+    "bottleneck_different_groupsize",
+    "double_bottleneck",
+    "recent_admixture",
+    "multi_bottleneck",
+    "multi_bottleneck_2",
+    "multi_bottleneck_3",
+]
+"""
+Models = [   
+    #"complex_history",
+    "complex_history_pooled",
+]  # Models to simulate
 
 
 rule all:
     input:
         "results/.setup_complete",
         #"simple_bottleneck_model.vcf",
-         treeplots=expand("results/TreeMix/plots/Consensus_{model}_plots.pdf", model=Models),
-         txt=expand("results/TreeMix/{model}-OptM.txt", model=Models)
+        treeplots=expand(
+            "results/TreeMix/plots/Consensus_{model}_plots.pdf", model=Models
+        ),
+        txt=expand("results/TreeMix/{model}-OptM.txt", model=Models),
 
 
 rule setup:
-    conda: "envs/vcftools.yaml"
-    output: setup="results/.setup_complete"
-           
+    conda:
+        "envs/vcftools.yaml"
+    output:
+        setup="results/.setup_complete",
     shell:
         """
         mkdir -p results/TreeMix/bootstrap logs/ misc/
         touch {output}        
-        """         
+        """
 
-         
 
 rule build_model:
-    output: "results/{model}-full.vcf.gz"
-    conda: "envs/msprime.yaml"        
+    output:
+        "results/{model}-full.vcf.gz",
+    conda:
+        "envs/msprime.yaml"
     params:
         isize=1e6,
         genyear=2900,
         rate=1.67e-10,
     script:
-       "scripts/{wildcards.model}.py"
-
-
-        
+        "scripts/{wildcards.model}.py"
 
 
 rule subsample_recode:
-    conda: "envs/vcftools.yaml"
-    input: vcf="results/{model}-full.vcf.gz",
-    output: "results/{model}-filtered.vcf.gz"
+    conda:
+        "envs/vcftools.yaml"
+    input:
+        vcf="results/{model}-full.vcf.gz",
+    output:
+        "results/{model}-filtered.vcf.gz",
     threads: 60
     params:
-        nsnps=20000 #sample 20000 markers for speed
-    message: "Generating random sample of SNPs and recoding for TreeMix"
-    shell:            
+        nsnps=100000,  #sample 100000 markers
+    message:
+        "Generating random sample of SNPs and recoding for TreeMix"
+    shell:
         r"""
        
         #bcftools index -f  {input.vcf}
@@ -88,17 +119,18 @@ rule subsample_recode:
         
         """
 
-        
+
 rule make_new_clusterfile:
-    conda: "envs/vcftools.yaml"
+    conda:
+        "envs/vcftools.yaml"
     input:
         vcf="results/{model}-filtered.vcf.gz",
-       
-
-    output: clust="misc/{model}.clust",
-            list="misc/{model}.list"
-    message: "Generating new cluster file"
-    priority: 0         
+    output:
+        clust="misc/{model}.clust",
+        list="misc/{model}.list",
+    message:
+        "Generating new cluster file"
+    priority: 0
     shell:
         r"""
  
@@ -108,46 +140,48 @@ rule make_new_clusterfile:
         """
 
 
-        
-       
-
-
 rule treemix_input:
-    conda: "envs/vcftools.yaml"
-    input: vcf="results/{model}-filtered.vcf.gz",       
-   	   clust="misc/{model}.clust"
-    output: "results/{model}-filtered.treemix.frq.gz"
-    
+    conda:
+        "envs/vcftools.yaml"
+    input:
+        vcf="results/{model}-filtered.vcf.gz",
+        clust="misc/{model}.clust",
+    output:
+        "results/{model}-filtered.treemix.frq.gz",
     shell:
-          """
+        """
           workflow/scripts/vcf2treemix.sh {input.vcf} {input.clust}
-          """
+        """
 
-### rule for generating a single bootstrap replicates
+
+### rule for generating a single bootstrap replicate
 ### bootstrap replicates will be run in parallel
 
+
 rule:
-    name: "TreeMix_bootstrap_{wildcards.model}_{wildcards.migrations}_{wildcards.replicate}" 
-    conda: "envs/treemix.yaml"
-    input: "results/{model}-filtered.treemix.frq.gz"
+    name:
+        "TreeMix_bootstrap_{wildcards.model}_{wildcards.migrations}_{wildcards.replicate}"
+    conda:
+        "envs/treemix.yaml"
+    input:
+        "results/{model}-filtered.treemix.frq.gz",
     output:
         treeout="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.treeout.gz",
-            cov="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.cov.gz",
-            modelcov="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.modelcov.gz",
-            llik="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.llik"
-            #dir=directory("TreeMix/bootstrap/{myfilter}")
+        cov="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.cov.gz",
+        modelcov="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.modelcov.gz",
+        llik="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}.llik",
+        #dir=directory("TreeMix/bootstrap/{myfilter}")
     threads: 1
     retries: 5
     resources:
-        nr = lambda wildcards, attempt: attempt,
-        runtime = "24h"
-        
-    log: "logs/bootrep_{model}_m{migrations}_b{replicate}.log"
+        nr=lambda wildcards, attempt: attempt,
+        runtime="24h",
+    log:
+        "logs/bootrep_{model}_m{migrations}_b{replicate}.log",
     params:
-        prefix="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}"
-        
+        prefix="results/TreeMix/bootstrap/{model}/bootrep_m{migrations}_b{replicate}",
     message:
-        "TreeMix boostrap replicate no. {wildcards.replicate} - Model: {wildcards.model} migrations: {wildcards.migrations} max runtime per job: {resources.runtime} min, try {resources.nr} of 5"    
+        "TreeMix boostrap replicate no. {wildcards.replicate} - Model: {wildcards.model} migrations: {wildcards.migrations} max runtime per job: {resources.runtime} min, try {resources.nr} of 5"
     shell:
         r"""
         mkdir -p results/TreeMix/bootstrap/{wildcards.model} 
@@ -159,31 +193,44 @@ rule:
         echo finished bootstrap replicate  {wildcards.replicate}, {wildcards.model}, {wildcards.migrations} migrations, attempts: {resources.nr}
         
         """
-
         # put all trees into a single file
 
+
 rule:
-    name: "merge_replicates_{wildcards.model}_{wildcards.migrations}"
+    name:
+        "merge_replicates_{wildcards.model}_{wildcards.migrations}"
     input:
-        expand("results/TreeMix/bootstrap/{{model}}/bootrep_m{{migrations}}_b{replicate}.treeout.gz",
-               replicate=TreeMixBoot)
+        expand(
+            "results/TreeMix/bootstrap/{{model}}/bootrep_m{{migrations}}_b{replicate}.treeout.gz",
+            replicate=TreeMixBoot,
+        ),
     output:
-        "results/TreeMix/alltrees_{model}_m{migrations}.trees"
-    message: "Merging replicates for {wildcards.model}, migrations {wildcards.migrations}"
+        "results/TreeMix/alltrees_{model}_m{migrations}.trees",
+    message:
+        "Merging replicates for {wildcards.model}, migrations {wildcards.migrations}"
     shell:
-         """
+        """
          for f in {input}
          do
            zcat $f | head -1 >> {output}
          done
          """
 
+
 rule OptM:
-    conda: "envs/r-optm.yaml"
-    input: expand("results/TreeMix/bootstrap/{{model}}/bootrep_m{migrations}_b{replicate}.llik", migrations=TreeMixMigr, replicate=TreeMixBoot)
-    output: plot="results/TreeMix/plots/{model}-OptM-plot.pdf",
-            txt="results/TreeMix/{model}-OptM.txt"
-    params: folder="results/TreeMix/bootstrap/{model}"        
+    conda:
+        "envs/r-optm.yaml"
+    input:
+        expand(
+            "results/TreeMix/bootstrap/{{model}}/bootrep_m{migrations}_b{replicate}.llik",
+            migrations=TreeMixMigr,
+            replicate=TreeMixBoot,
+        ),
+    output:
+        plot="results/TreeMix/plots/{model}-OptM-plot.pdf",
+        txt="results/TreeMix/{model}-OptM.txt",
+    params:
+        folder="results/TreeMix/bootstrap/{model}",
     shell:
         r"""
         mkdir -p results/TreeMix/plots
@@ -203,17 +250,21 @@ EOF
         
         """
 
+
 rule plot_trees:
-    conda: "envs/treemix.yaml"
+    conda:
+        "envs/treemix.yaml"
     input:
-        cons=expand("results/TreeMix/Consensus_{{model}}_m{migrations}.treeout.gz", migrations=TreeMixMigr),
-        list="misc/{model}.list"
+        cons=expand(
+            "results/TreeMix/Consensus_{{model}}_m{migrations}.treeout.gz",
+            migrations=TreeMixMigr,
+        ),
+        list="misc/{model}.list",
     output:
-        pdf="results/TreeMix/plots/Consensus_{model}_plots.pdf"
+        pdf="results/TreeMix/plots/Consensus_{model}_plots.pdf",
     params:
         ms=TreeMixMigr,
-        prefix="results/TreeMix/Consensus_{model}_m"
-
+        prefix="results/TreeMix/Consensus_{model}_m",
     shell:
         r"""
 mkdir -p TreeMix/plots
@@ -242,13 +293,17 @@ EOF
         
         
         """
- 
+
+
 rule consensus:
-    conda: "envs/phylip.yaml"
-    input: "results/TreeMix/alltrees_{model}_m{migrations}.trees"
-    output: "results/TreeMix/{model}_m{migrations}.contree"
+    conda:
+        "envs/phylip.yaml"
+    input:
+        "results/TreeMix/alltrees_{model}_m{migrations}.trees",
+    output:
+        "results/TreeMix/{model}_m{migrations}.contree",
     params:
-        wdir="results/TreeMix/{model}_m{migrations}_wdir"
+        wdir="results/TreeMix/{model}_m{migrations}_wdir",
     shell:
         """
         set -x
@@ -261,29 +316,34 @@ rule consensus:
         cd $WD
 
         echo $posOutgroup
-	echo $IN > pconf
-	echo "O" >> pconf
-	echo $posOutgroup >> pconf
-	echo "Y" >> pconf
+    echo $IN > pconf
+    echo "O" >> pconf
+    echo $posOutgroup >> pconf
+    echo "Y" >> pconf
         consense < pconf 
         cat outtree | tr -d "\n" > $OUT
         echo >> $OUT
         cd $RD
         rm -rf {params.wdir}/
         """
-  
+
+
 rule final_tree_from_consensus:
-    conda: "envs/treemix.yaml"
+    conda:
+        "envs/treemix.yaml"
     input:
         contree="results/TreeMix/{model}_m{migrations}.contree",
-        frq="results/{model}-filtered.treemix.frq.gz"
-    output: treeout="results/TreeMix/Consensus_{model}_m{migrations}.treeout.gz",
-            cov="results/TreeMix/Consensus_{model}_m{migrations}.cov.gz",
-            modelcov="results/TreeMix/Consensus_{model}_m{migrations}.modelcov.gz"
+        frq="results/{model}-filtered.treemix.frq.gz",
+    output:
+        treeout="results/TreeMix/Consensus_{model}_m{migrations}.treeout.gz",
+        cov="results/TreeMix/Consensus_{model}_m{migrations}.cov.gz",
+        modelcov="results/TreeMix/Consensus_{model}_m{migrations}.modelcov.gz",
     params:
-        prefix="results/TreeMix/Consensus_{model}_m{migrations}"
-    log: "logs/Consensus_{model}_m{migrations}.log"
-    message: "Computing final consensus tree for {wildcards.model}, migrations: {wildcards.migrations}"     
+        prefix="results/TreeMix/Consensus_{model}_m{migrations}",
+    log:
+        "logs/Consensus_{model}_m{migrations}.log",
+    message:
+        "Computing final consensus tree for {wildcards.model}, migrations: {wildcards.migrations}"
     shell:
         """
         treemix -i {input.frq} -m {wildcards.migrations} -k 500 -root Wild \
@@ -291,4 +351,3 @@ rule final_tree_from_consensus:
 
         
         """
-        
