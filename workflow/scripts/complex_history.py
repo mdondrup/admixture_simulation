@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+##!/usr/bin/env python
 import msprime
 from itertools import product
 import re
@@ -88,7 +88,7 @@ demography.add_population(
 demography.add_population(
     name="AsiaSakeAnc",
     description="Asia Sake ancestral population",
-    initial_size=isize,
+    initial_size=10*isize,
 )
 demography.add_population(
     name="SakeAnc",
@@ -183,19 +183,23 @@ demography.add_population_split(100000*gy, derived=["Wild"], ancestral="ANC")
 demography.sort_events()
 
 print(demography)
-# Create sample names for 10 individuals per population, treat Kveik as a single population
-tup=list(product(["Wild","AsianFermentation", "Ale", 
-                  "Lager"],range(1,11))) + list(product(["Sake"], range(1,21))) + list(product(["Kveik"],range(1,51)))
-nams=list(map(lambda x: x[0]+"_"+str(x[1]), tup)) # e.g. Wild_1, Wild_2, ..., Lager_10
+#print(demography)
 
+# Create sample names for 10 individuals per population, treat Sake and Kveik as pooled populations
+tup=list(product(["Wild","AsianFermentation", "Ale", "Lager", "SakeA", "SakeB",
+                  "Kveik1", "Kveik2", "Kveik3", "Kveik4"
+                  ],range(1,11))) + list(product(["Kveik5"],range(1,6)))
+nams=list(map(lambda x: x[0]+"_"+str(x[1]), tup)) # e.g. Wild_1, Wild_2, ..., Lager_10
+print("Sample names: ", nams)
 ts = msprime.sim_ancestry(
     {"Wild":10, "AsianFermentation":10,  "Ale":10, "Lager":10,
      "SakeA":10, "SakeB":10, 
-     "Kveik1":10, "Kveik2":10, "Kveik3":10, "Kveik4":10, "Kveik5":10},
+     "Kveik1":10, "Kveik2":10, "Kveik3":10, "Kveik4":10, "Kveik5":5},
     sequence_length=12e6, # 12 Mb, ~ size of S. cerevisiae genome
+    ploidy=2, # simulate mostly tetraploid genomes
     demography=demography, random_seed=1234)
 print("simulating mutations")
-mts = msprime.sim_mutations(ts, rate=rate, random_seed=5678, model=msprime.JC69())
+mts = msprime.sim_mutations(ts, rate=rate, random_seed=5678, model=msprime.JC69(), discrete_genome=True)
 print("Total number of mutations: "+str(mts.num_mutations))
 
 
@@ -206,6 +210,8 @@ vcf =  re.sub(".gz$", "", snakemake.output[0])
 with open(vcf, 'w') as file:
       mts.write_vcf(file, individual_names=nams, allow_position_zero = True, contig_id="1")
       file.close()  
+
+#SVG(mts.draw_svg())
 
       
 check_call(['bgzip', vcf ])      

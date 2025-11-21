@@ -46,7 +46,7 @@ Models = [
 ]
 """
 Models = [   
-    #"complex_history",
+    "complex_history",
     "complex_history_pooled",
 ]  # Models to simulate
 
@@ -93,9 +93,9 @@ rule subsample_recode:
         vcf="results/{model}-full.vcf.gz",
     output:
         "results/{model}-filtered.vcf.gz",
-    threads: 60
+    threads: 120
     params:
-        nsnps=100000,  #sample 100000 markers
+        nsnps=100000,  #sample 25,000 markers
     message:
         "Generating random sample of SNPs and recoding for TreeMix"
     shell:
@@ -104,11 +104,12 @@ rule subsample_recode:
         #bcftools index -f  {input.vcf}
        
         set -x
-        #set +o pipefail
-        bcftools view --threads {threads} --with-header --types snps --max-alleles 2  {input.vcf} |\
-        vcftools --gzvcf - --max-missing 1 --recode --stdout | bgzip -c > $$.tmp.vcf.gz
+        set +o pipefail
+        bcftools view --threads {threads} --with-header --types snps --max-alleles 2  {input.vcf} \
+        | bgzip -c > $$.tmp.vcf.gz
+        # vcftools --gzvcf - --max-missing 1 --recode --stdout | bgzip -c > $$.tmp.vcf.gz
         bcftools view --header-only $$.tmp.vcf.gz > {output}.unsorted
-        bcftools view --no-header $$.tmp.vcf.gz | awk '{{ printf("%f\t%s\n",rand(),$0);}}' | ( sort -t $'\t'  -T . -k1,1g || true) | head -n {params.nsnps} | cut -f 2- >> {output}.unsorted
+        bcftools view --no-header $$.tmp.vcf.gz | head -n {params.nsnps} >> {output}.unsorted
         bcftools sort -o {output} {output}.unsorted 
        
 
@@ -175,7 +176,7 @@ rule:
     retries: 5
     resources:
         nr=lambda wildcards, attempt: attempt,
-        runtime="24h",
+        runtime="10",
     log:
         "logs/bootrep_{model}_m{migrations}_b{replicate}.log",
     params:
@@ -189,7 +190,7 @@ rule:
         echo "SEED=$SEED" > {log}
         #echo calculating bootstrap replicate  {wildcards.replicate} for {wildcards.model} with {wildcards.migrations} migrations, seed: $SEED
         echo 
-        timeout --kill-after=5m {resources.runtime}m treemix -i {input} -bootstrap -se -k 500 -m {wildcards.migrations} -root Wild -seed $SEED -o {params.prefix} >> {log} 2>&1
+        timeout --kill-after=30s {resources.runtime}m treemix -i {input} -bootstrap -se -k 500 -m {wildcards.migrations} -root Wild -seed $SEED -o {params.prefix} >> {log} 2>&1
         echo finished bootstrap replicate  {wildcards.replicate}, {wildcards.model}, {wildcards.migrations} migrations, attempts: {resources.nr}
         
         """
@@ -350,4 +351,10 @@ rule final_tree_from_consensus:
         -se -tf {input.contree} -o {params.prefix} > {log}
 
         
+        """
+
+rule clean:
+    shell:
+        """
+        rm -rf misc/ results/* *.tmp.R *.tmp.vcf.gz
         """
